@@ -1,2 +1,2 @@
-# -Froggy-
+# Froggy
 Custom File Manager

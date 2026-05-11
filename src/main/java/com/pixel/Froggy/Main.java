@@ -1,6 +1,7 @@
-package org.example;
+package com.pixel.Froggy;
 
 import com.formdev.flatlaf.FlatLightLaf;
+
 import javax.swing.*;
 
 public class Main {
@@ -14,7 +15,7 @@ public class Main {
 
         SwingUtilities.invokeLater(() -> {
             FileExplorer frame = new FileExplorer();
-            java.net.URL iconURL = Main.class.getResource("/icons8-лягушка-96.png");
+            java.net.URL iconURL = Main.class.getResource("/assets/Froggy/icon.png");
             if (iconURL != null) {
                 ImageIcon img = new ImageIcon(iconURL);
                 frame.setIconImage(img.getImage());

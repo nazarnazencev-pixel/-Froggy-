@@ -1,4 +1,4 @@
-package org.example;
+package com.pixel.Froggy;
 
 import javax.swing.*;
 import java.awt.*;

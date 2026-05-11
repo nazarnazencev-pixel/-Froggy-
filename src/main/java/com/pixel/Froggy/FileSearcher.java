@@ -1,4 +1,4 @@
-package org.example;
+package com.pixel.Froggy;
 
 import javax.swing.SwingWorker;
 import java.io.File;
@@ -23,8 +23,10 @@ public class FileSearcher {
                     worker.doPublish(f);
                 }
             }
-            lastQuery   = queryLower;
-            lastResults = filtered;
+            if (!worker.isCancelled()) {
+                lastQuery   = queryLower;
+                lastResults = filtered;
+            }
             return;
         }
 
@@ -35,8 +37,10 @@ public class FileSearcher {
             pool.submit(() -> scanParallel(root.toPath(), queryLower, worker, found, pool, searchContent)).get(180, TimeUnit.SECONDS);
         } catch (Exception ignored) {}
 
-        lastQuery   = queryLower;
-        lastResults = new ArrayList<>(found);
+        if (!worker.isCancelled()) {
+            lastQuery   = queryLower;
+            lastResults = new ArrayList<>(found);
+        }
     }
 
     private boolean isContentMatch(File file, String query) {
@@ -53,6 +57,7 @@ public class FileSearcher {
         List<Path> topDirs = new ArrayList<>();
         try (DirectoryStream<Path> stream = Files.newDirectoryStream(root)) {
             for (Path entry : stream) {
+                if (worker.isCancelled()) break;
                 String name = entry.getFileName().toString();
                 boolean nameMatch = name.toLowerCase().contains(query);
                 boolean contentMatch = searchContent && !nameMatch && Files.isRegularFile(entry) && isContentMatch(entry.toFile(), query);
@@ -72,6 +77,7 @@ public class FileSearcher {
         for (Path dir : topDirs) {
             RecursiveAction task = new RecursiveAction() {
                 @Override protected void compute() {
+                    if (worker.isCancelled()) return;
                     walkDir(dir, query, worker, found, searchContent);
                 }
             };
@@ -88,6 +94,7 @@ public class FileSearcher {
             Files.walkFileTree(dir, EnumSet.of(FileVisitOption.FOLLOW_LINKS), Integer.MAX_VALUE, new SimpleFileVisitor<>() {
                 @Override
                 public FileVisitResult preVisitDirectory(Path d, BasicFileAttributes a) {
+                    if (worker.isCancelled()) return FileVisitResult.TERMINATE;
                     String name = d.getFileName().toString();
                     if (name.toLowerCase().contains(query)) {
                         File f = d.toFile();
@@ -99,6 +106,7 @@ public class FileSearcher {
 
                 @Override
                 public FileVisitResult visitFile(Path file, BasicFileAttributes a) {
+                    if (worker.isCancelled()) return FileVisitResult.TERMINATE;
                     String name = file.getFileName().toString();
                     boolean nameMatch = name.toLowerCase().contains(query);
                     boolean contentMatch = searchContent && !nameMatch && a.isRegularFile() && isContentMatch(file.toFile(), query);

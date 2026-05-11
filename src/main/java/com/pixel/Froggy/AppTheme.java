@@ -1,4 +1,4 @@
-package org.example;
+package com.pixel.Froggy;
 
 import java.awt.*;
 import java.util.List;

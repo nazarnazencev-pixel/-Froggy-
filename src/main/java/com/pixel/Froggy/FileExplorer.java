@@ -1,7 +1,8 @@
-package org.example;
+package com.pixel.Froggy;
 
 import com.formdev.flatlaf.FlatDarkLaf;
 import com.formdev.flatlaf.FlatLightLaf;
+
 import javax.swing.Timer;
 import javax.swing.*;
 import java.awt.*;
@@ -18,7 +19,7 @@ public class FileExplorer extends JFrame {
     private JProgressBar progressBar;
     private JScrollPane scrollPane;
     private JPanel contentPanel;
-    private JButton findBtn, clearBtn;
+    private JButton findBtn, clearBtn, stopBtn;
     private JComboBox<String> sortCombo;
     private JComboBox<DriveItem> driveCombo;
 
@@ -42,6 +43,7 @@ public class FileExplorer extends JFrame {
 
     private final FileSearcher searcher = new FileSearcher();
     private final FileSorter sorter = new FileSorter();
+    private FileSearcher.InternalWorker currentWorker;
 
     private static class ParsedQuery {
         String text = ""; List<String> extensions = null;
@@ -74,7 +76,7 @@ public class FileExplorer extends JFrame {
                 case "search" -> { g2.drawOval(x+2,y+2,9,9); g2.drawLine(x+10,y+10,x+14,y+14); }
                 case "clear"  -> { g2.drawRect(x+3,y+5,10,10); g2.drawLine(x+1,y+4,x+15,y+4); g2.drawLine(x+6,y+2,x+10,y+2); }
                 case "trash"  -> { g2.drawRect(x+3,y+4,10,11); g2.drawLine(x+1,y+4,x+15,y+4); g2.drawLine(x+6,y+2,x+10,y+2); g2.drawLine(x+6,y+6,x+6,y+13); g2.drawLine(x+10,y+6,x+10,y+13); }
-                case "close"  -> { g2.drawLine(x+7,y+7,x+15,y+15); g2.drawLine(x+15,y+7,x+7,y+15); }
+                case "close"  -> { g2.drawLine(x+4,y+4,x+12,y+12); g2.drawLine(x+12,y+4,x+4,y+12); }
                 case "drive"  -> { g2.drawOval(x+2,y+1,12,5); g2.drawLine(x+2,y+3,x+2,y+13); g2.drawLine(x+14,y+3,x+14,y+13); g2.drawOval(x+2,y+9,12,5); g2.drawLine(x+5,y+11,x+9,y+11); }
             }
             g2.dispose();
@@ -212,12 +214,21 @@ public class FileExplorer extends JFrame {
         sortPanel.add(sortCombo);
 
         findBtn  = new JButton("Найти",    new CustomIcon("search"));
+        stopBtn  = new JButton("Стоп",     new CustomIcon("close"));
         clearBtn = new JButton("Очистить", new CustomIcon("clear"));
+
+        stopBtn.addActionListener(e -> {
+            if (currentWorker != null && !currentWorker.isDone()) {
+                currentWorker.cancel(true);
+                progressBar.setString("Остановка поиска...");
+            }
+        });
 
         rightButtons = new JPanel(new FlowLayout(FlowLayout.RIGHT,6,0));
         rightButtons.setOpaque(false);
         rightButtons.add(sortPanel);
         rightButtons.add(findBtn);
+        rightButtons.add(stopBtn);
         rightButtons.add(clearBtn);
 
         topPanel.add(searchRow,    BorderLayout.CENTER);
@@ -246,11 +257,75 @@ public class FileExplorer extends JFrame {
     }
 
     private DriveItem[] buildDriveItems() {
-        File[] roots = File.listRoots(); List<DriveItem> items = new ArrayList<>(); items.add(new DriveItem());
-        if (roots!=null) for(File r:roots) if(r.exists()&&r.canRead()) items.add(new DriveItem(r));
+        Set<File> addedRoots = new LinkedHashSet<>(); // Используем Set, чтобы пути не дублировались
+        List<DriveItem> items = new ArrayList<>();
+
+        // 1. Домашняя папка
+        File home = new File(System.getProperty("user.home"));
+        items.add(new DriveItem(home, "Домашняя папка (" + System.getProperty("user.name") + ")"));
+        addedRoots.add(home);
+
+        // 2. Стандартные корни (C:\, D:\ на Win или / на Linux)
+        File[] roots = File.listRoots();
+        if (roots != null) {
+            for (File r : roots) {
+                if (r.exists() && !addedRoots.contains(r)) {
+                    String name = r.getAbsolutePath().equals("/") ? "Корень системы (/)" : r.getAbsolutePath();
+                    items.add(new DriveItem(r, name));
+                    addedRoots.add(r);
+                }
+            }
+        }
+
+        // 3. Специфично для Linux: парсим /etc/fstab
+        if (System.getProperty("os.name").toLowerCase().contains("linux")) {
+            File fstab = new File("/etc/fstab");
+            if (fstab.exists() && fstab.canRead()) {
+                try (java.util.Scanner scanner = new java.util.Scanner(fstab)) {
+                    while (scanner.hasNextLine()) {
+                        String line = scanner.nextLine().trim();
+                        if (line.isEmpty() || line.startsWith("#")) continue;
+
+                        String[] parts = line.split("\\s+");
+                        if (parts.length >= 2) {
+                            File mountPoint = new File(parts[1]);
+                            // Добавляем только существующие папки, которые мы еще не добавили
+                            // Игнорируем своп, спец-директории и загрузчик
+                            if (mountPoint.exists() && mountPoint.isDirectory() && !addedRoots.contains(mountPoint)) {
+                                String path = mountPoint.getAbsolutePath();
+                                if (!path.startsWith("/proc") && !path.startsWith("/sys") && !path.startsWith("/dev") && !path.startsWith("/tmp") && !path.startsWith("/boot") && !path.startsWith("/swap")) {
+                                    items.add(new DriveItem(mountPoint, "Диск: " + mountPoint.getName() + " (" + path + ")"));
+                                    addedRoots.add(mountPoint);
+                                }
+                            }
+                        }
+                    }
+                } catch (Exception ignored) {}
+            }
+            // Дополнительно: проверяем /media и /mnt на наличие смонтированных флешек
+            File[] commonMounts = {new File("/media/" + System.getProperty("user.name")), new File("/run/media/" + System.getProperty("user.name")), new File("/mnt")};
+            for (File base : commonMounts) {
+                if (base.exists() && base.isDirectory()) {
+                    File[] subDirs = base.listFiles();
+                    if (subDirs != null) {
+                        for (File sub : subDirs) {
+                            if (sub.isDirectory() && !addedRoots.contains(sub)) {
+                                items.add(new DriveItem(sub, "Съемный диск: " + sub.getName()));
+                                addedRoots.add(sub);
+                            }
+                        }
+                    }
+                }
+            }
+        }
         return items.toArray(new DriveItem[0]);
     }
-    private File getSearchRoot() { DriveItem sel=(DriveItem)driveCombo.getSelectedItem(); return (sel==null||sel.root==null)?new File(System.getProperty("user.home")):sel.root; }
+
+
+    private File getSearchRoot() {
+        DriveItem sel = (DriveItem)driveCombo.getSelectedItem();
+        return (sel == null || sel.root == null) ? new File(System.getProperty("user.home")) : sel.root;
+    }
 
     private JPanel buildHistoryTab() {
         historyTab = new JPanel(new BorderLayout()); historyTopPanel = new JPanel(new BorderLayout(10,10)); historyTopPanel.setBorder(BorderFactory.createEmptyBorder(12,15,12,15));
@@ -265,7 +340,7 @@ public class FileExplorer extends JFrame {
     }
 
     private void addHistoryEntry(String query, File searchRoot, List<File> found) {
-        String driveLabel = searchRoot.getAbsolutePath().equals(System.getProperty("user.home")) ? "home" : searchRoot.getAbsolutePath();
+        String driveLabel = searchRoot.getAbsolutePath().equals(System.getProperty("user.home")) ? "~" : searchRoot.getAbsolutePath();
         historyEntries.add(0, new HistoryEntry(query+"  ["+driveLabel+"]", found)); saveSettings(); rebuildHistoryUI();
     }
 
@@ -322,7 +397,7 @@ public class FileExplorer extends JFrame {
         topPanel.setBackground(AppTheme.topPanelBackground());
         searchField.setBackground(AppTheme.fieldBackground()); searchField.setForeground(AppTheme.fieldForeground()); searchField.setCaretColor(AppTheme.fieldForeground());
         driveCombo.setBackground(AppTheme.fieldBackground()); driveCombo.setForeground(AppTheme.fieldForeground());
-        styleButton(findBtn); styleButton(clearBtn);
+        styleButton(findBtn); styleButton(stopBtn); styleButton(clearBtn);
         contentPanel.setBackground(AppTheme.background()); scrollPane.getViewport().setBackground(AppTheme.background());
 
         for(String ext:groupHeaders.keySet()){
@@ -356,6 +431,7 @@ public class FileExplorer extends JFrame {
     }
 
     private void clearSearch(){
+        if (currentWorker != null) currentWorker.cancel(true);
         searcher.clearCache(); searchField.setText(""); contentPanel.removeAll();
         groupPanels.clear(); groupArrows.clear(); groupHeaders.clear(); groupTitles.clear();
         groupItems.clear(); fileItems.clear(); currentFound.clear();
@@ -373,17 +449,22 @@ public class FileExplorer extends JFrame {
         contentPanel.removeAll(); groupPanels.clear(); groupArrows.clear();
         groupHeaders.clear(); groupTitles.clear(); groupItems.clear(); fileItems.clear(); currentFound.clear();
         progressBar.setIndeterminate(false); progressBar.setMinimum(0); progressBar.setMaximum(1); progressBar.setValue(0);
-        String dn=searchRoot.getAbsolutePath().equals(System.getProperty("user.home"))?"home":searchRoot.getAbsolutePath();
+        String dn = searchRoot.getAbsolutePath().equals(System.getProperty("user.home")) ? "~" : searchRoot.getAbsolutePath();
         progressBar.setString("Ищу на "+dn+"...");
 
-        FileSearcher.InternalWorker worker = new FileSearcher.InternalWorker(){
+        if (currentWorker != null) currentWorker.cancel(true);
+
+        currentWorker = new FileSearcher.InternalWorker(){
             private final List<File> allFound=new ArrayList<>();
             @Override protected Void doInBackground(){ searcher.searchAndPublish(searchRoot, parsed.text, this, searchInContent, isRegex, extensions); return null; }
             @Override protected void process(List<File> chunks){
+                if (isCancelled()) return;
                 for(File f:chunks){allFound.add(f);currentFound.add(f);addFileToGroup(f);}
                 progressBar.setString("Ищу файлы: "+allFound.size()+"..."); contentPanel.revalidate();
             }
             @Override protected void done(){
+                if (isCancelled()) { progressBar.setString("Поиск прерван. Найдено: " + allFound.size()); return; }
+                resortAllGroups();
                 final int total=allFound.size();
                 addHistoryEntry(rawQuery,searchRoot,new ArrayList<>(allFound));
                 progressBar.setMinimum(0); progressBar.setMaximum(Math.max(total,1)); progressBar.setValue(0);
@@ -396,7 +477,7 @@ public class FileExplorer extends JFrame {
                 anim.start();
             }
         };
-        worker.execute();
+        currentWorker.execute();
     }
 
     private void addFileToGroup(File file){
@@ -433,17 +514,30 @@ public class FileExplorer extends JFrame {
         }
         FileItem item = new FileItem(file);
         item.setFontSize(fontSize);
-        fileItems.add(item); groupItems.get(ext).add(item);
-        List<FileItem> items = groupItems.get(ext); items.sort(currentComparator());
-        JPanel container = groupPanels.get(ext); container.removeAll();
-        for(FileItem fi:items) container.add(fi);
+        fileItems.add(item);
+        groupItems.get(ext).add(item);
+        groupPanels.get(ext).add(item);
     }
 
     static class DriveItem {
-        final File root; final String label;
-        DriveItem(File root) { this.root = root; this.label = root.getAbsolutePath() + "  [" + fmtBytes(root.getFreeSpace()) + " своб. / " + fmtBytes(root.getTotalSpace()) + "]"; }
-        DriveItem() { this.root = null; this.label = "Весь компьютер (home)"; }
-        private static String fmtBytes(long b) { if (b <= 0) return "?"; if (b < 1024L*1024*1024) return String.format("%.0f МБ", b/(1024.0*1024)); return String.format("%.1f ГБ", b/(1024.0*1024*1024)); }
+        final File root;
+        final String label;
+
+        DriveItem(File root, String customName) {
+            this.root = root;
+            this.label = customName + " [" + fmtBytes(root.getFreeSpace()) + " своб. / " + fmtBytes(root.getTotalSpace()) + "]";
+        }
+
+        DriveItem(File root) {
+            this(root, root.getAbsolutePath());
+        }
+
+        private static String fmtBytes(long b) {
+            if (b <= 0) return "?";
+            if (b < 1024L*1024*1024) return String.format("%.0f МБ", b/(1024.0*1024));
+            return String.format("%.1f ГБ", b/(1024.0*1024*1024));
+        }
+
         @Override public String toString() { return label; }
     }
 }

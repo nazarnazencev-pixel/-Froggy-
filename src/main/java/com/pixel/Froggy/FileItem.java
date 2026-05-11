@@ -1,4 +1,4 @@
-package org.example;
+package com.pixel.Froggy;
 
 import javax.swing.*;
 import javax.swing.filechooser.FileSystemView;
@@ -24,7 +24,15 @@ public class FileItem extends JPanel {
 
         JPanel left = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 0));
         left.setOpaque(false);
-        left.add(new JLabel(fsv.getSystemIcon(file)));
+
+        JLabel iconLabel = new JLabel();
+        iconLabel.setPreferredSize(new Dimension(16, 16));
+        left.add(iconLabel);
+
+        new SwingWorker<Icon, Void>() {
+            @Override protected Icon doInBackground() { return fsv.getSystemIcon(file); }
+            @Override protected void done() { try { iconLabel.setIcon(get()); } catch (Exception ignored) {} }
+        }.execute();
 
         nameLabel = new JLabel(file.getName());
         nameLabel.setFont(new Font("Segoe UI", Font.PLAIN, 13));
