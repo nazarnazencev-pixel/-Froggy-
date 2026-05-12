@@ -1,4 +1,4 @@
-package org.example;
+package com.pixel.Froggy;
 
 import javax.swing.*;
 import java.awt.*;
@@ -108,6 +108,38 @@ public class SettingsTab extends JPanel {
         useRegexCheckBox.addActionListener(e -> { if (onSearchModeChanged != null) onSearchModeChanged.run(); });
         mainPanel.add(useRegexCheckBox);
 
+        mainPanel.add(Box.createVerticalStrut(25));
+
+        JButton helpButton = new JButton("Справка");
+        helpButton.setFont(new Font("Segoe UI", Font.PLAIN, 13));
+        helpButton.setAlignmentX(Component.LEFT_ALIGNMENT);
+        helpButton.setFocusPainted(false);
+        helpButton.addActionListener(e -> {
+            String message =
+                    "Froggy — поисковой файловый менеджер\n\n" +
+                            "• Ищет файлы по всему диску (включая системные файлы)\n" +
+                            "• Позволяет быстро найти нужный файл и скопировать путь к нему\n" +
+                            "• Хранит историю поиска \n" +
+                            "• Разбивает найденные файлы по группам\n" +
+                            "• Позволяет искать файлы по расширениям через / \n" +
+                            "• При указании расширения точка не нужна\n" +
+                            "• Работает и на Windows и на Linux\n" +
+                            "• Приятного Пользования!";
+            JTextArea textArea = new JTextArea(message);
+            textArea.setFont(new Font("Segoe UI", Font.PLAIN, 16)); // ← размер шрифта
+            textArea.setEditable(false);
+            textArea.setOpaque(false);
+
+            JOptionPane.showMessageDialog(
+                    SwingUtilities.getWindowAncestor(this),
+                    textArea,
+                    "Справка",
+                    JOptionPane.INFORMATION_MESSAGE
+            );
+        });
+        mainPanel.add(helpButton);
+
+        add(mainPanel, BorderLayout.NORTH);
         add(mainPanel, BorderLayout.NORTH);
         applyTheme();
     }
