@@ -1,3 +1,4 @@
+# ru Russian Version
 # 🐸 Froggy — Custom File Manager
 
 > Современный кастомный файловый менеджер с минималистичным интерфейсом и быстрой навигацией.
@@ -31,7 +32,6 @@ Froggy — это экспериментальный файловый менед
 
 # 🇺🇸 English Version
 
-```md id="en-readme-002"
 # 🐸 Froggy — Custom File Manager
 
 > A modern custom file manager with a minimalistic interface and fast navigation.
