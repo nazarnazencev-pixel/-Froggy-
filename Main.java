@@ -1,6 +1,7 @@
-package org.example;
+package com.pixel.Froggy;
 
 import com.formdev.flatlaf.FlatLightLaf;
+
 import javax.swing.*;
 
 public class Main {
