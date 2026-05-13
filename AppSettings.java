@@ -273,8 +273,8 @@ public class AppSettings {
                 {
                     textLabel.setIcon(new CustomIcon("drive"));
                     panel.add(textLabel, BorderLayout.CENTER);
-                    panel.setOpaque(true); // Панель непрозрачная
-                    textLabel.setOpaque(false); // Чтобы текст сливался с фоном панели
+                    panel.setOpaque(true); 
+                    textLabel.setOpaque(false); 
                 }
 
                 @Override
@@ -360,15 +360,13 @@ public class AppSettings {
         }
 
         private DriveItem[] buildDriveItems() {
-            Set<File> addedRoots = new LinkedHashSet<>(); // Используем Set, чтобы пути не дублировались
+            Set<File> addedRoots = new LinkedHashSet<>();
             List<DriveItem> items = new ArrayList<>();
 
-            // 1. Домашняя папка
             File home = new File(System.getProperty("user.home"));
             items.add(new DriveItem(home, "Домашняя папка (" + System.getProperty("user.name") + ")"));
             addedRoots.add(home);
 
-            // 2. Стандартные корни (C:\, D:\ на Win или / на Linux)
             File[] roots = File.listRoots();
             if (roots != null) {
                 for (File r : roots) {
@@ -380,7 +378,6 @@ public class AppSettings {
                 }
             }
 
-            // 3. Специфично для Linux: парсим /etc/fstab
             if (System.getProperty("os.name").toLowerCase().contains("linux")) {
                 File fstab = new File("/etc/fstab");
                 if (fstab.exists() && fstab.canRead()) {
@@ -392,8 +389,7 @@ public class AppSettings {
                             String[] parts = line.split("\\s+");
                             if (parts.length >= 2) {
                                 File mountPoint = new File(parts[1]);
-                                // Добавляем только существующие папки, которые мы еще не добавили
-                                // Игнорируем своп, спец-директории и загрузчик
+                                
                                 if (mountPoint.exists() && mountPoint.isDirectory() && !addedRoots.contains(mountPoint)) {
                                     String path = mountPoint.getAbsolutePath();
                                     if (!path.startsWith("/proc") && !path.startsWith("/sys") && !path.startsWith("/dev") && !path.startsWith("/tmp") && !path.startsWith("/boot") && !path.startsWith("/swap")) {
@@ -405,7 +401,6 @@ public class AppSettings {
                         }
                     } catch (Exception ignored) {}
                 }
-                // Дополнительно: проверяем /media и /mnt на наличие смонтированных флешек
                 File[] commonMounts = {new File("/media/" + System.getProperty("user.name")), new File("/run/media/" + System.getProperty("user.name")), new File("/mnt")};
                 for (File base : commonMounts) {
                     if (base.exists() && base.isDirectory()) {
